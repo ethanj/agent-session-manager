@@ -1,0 +1,40 @@
+{
+  "instances": [
+    {
+      "id": "workspace1",
+      "name": "Workspace 1",
+      "workspaceRoot": "/Users/example/projects/workspace",
+      "enabled": true,
+      "projects": ["atomic"]
+    }
+  ],
+  "projects": [
+    {
+      "id": "atomic",
+      "name": "Atomic",
+      "instanceId": "workspace1",
+      "repoRoots": ["/Users/example/projects/workspace"],
+      "lanes": ["research", "sdk", "ops"],
+      "managed": true
+    }
+  ],
+  "sessions": [
+    {
+      "sessionName": "atomic-codex2",
+      "scope": "project",
+      "projectId": "atomic",
+      "agentKind": "codex",
+      "role": "agent worker",
+      "managed": true,
+      "startCommand": "codex --dangerously-bypass-approvals-and-sandbox",
+      "resumeToken": "REPLACE_WITH_CODEX_RESUME_ID"
+    },
+    {
+      "sessionName": "atomic-term1",
+      "scope": "project",
+      "projectId": "atomic",
+      "role": "terminal",
+      "managed": true
+    }
+  ]
+}
