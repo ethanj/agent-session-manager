@@ -16,6 +16,16 @@ DEFAULT_SESSION="${DEFAULT_SESSION:-atomic-term1}"
 TMUX_BIN="${TMUX_BIN:-$(command -v tmux || printf /opt/homebrew/bin/tmux)}"
 TABBED_MODE=false
 
+require_executable() {
+  local label="$1"
+  local command_path="$2"
+
+  if ! command -v "$command_path" >/dev/null 2>&1; then
+    echo "ERROR: missing required executable ${label}: ${command_path}" >&2
+    exit 1
+  fi
+}
+
 if [[ "${1:-}" == "--tabs" ]]; then
   TABBED_MODE=true
   shift
@@ -35,6 +45,8 @@ SESSIONS=("$@")
 if [[ "$TABBED_MODE" == "false" && "${#SESSIONS[@]}" -eq 0 ]]; then
   SESSIONS=("$DEFAULT_SESSION")
 fi
+
+require_executable "tmux" "$TMUX_BIN"
 
 validate_sessions() {
   local missing=0
@@ -64,7 +76,7 @@ if [[ "$MODE" != "apply" ]]; then
   printf '  %s\n' "${SESSIONS[@]}"
   say "The script will run tmux -CC new -A -s <session> in each tab."
   say "Pre-requisite: tmux sessions must already exist."
-  validate_sessions "${SESSIONS[@]}"
+  validate_sessions "${SESSIONS[@]}" || true
   exit 0
 fi
 
@@ -73,11 +85,13 @@ if ! validate_sessions "${SESSIONS[@]}"; then
   exit 1
 fi
 
+require_executable "osascript" "${OSASCRIPT_BIN:-osascript}"
+
 open_single_session() {
   export TARGET_SESSION_NAME="$1"
   export TMUX_ATTACH_BIN="$TMUX_BIN"
 
-  osascript <<'APPLESCRIPT'
+  "${OSASCRIPT_BIN:-osascript}" <<'APPLESCRIPT'
 on run
   set sessionName to system attribute "TARGET_SESSION_NAME"
   set tmuxBin to system attribute "TMUX_ATTACH_BIN"
@@ -109,7 +123,7 @@ open_tabbed_sessions() {
   export TARGET_SESSION_NAMES="$joined_sessions"
   export TMUX_ATTACH_BIN="$TMUX_BIN"
 
-  osascript <<'APPLESCRIPT'
+  "${OSASCRIPT_BIN:-osascript}" <<'APPLESCRIPT'
 on run
   set sessionNamesRaw to system attribute "TARGET_SESSION_NAMES"
   set tmuxBin to system attribute "TMUX_ATTACH_BIN"

@@ -52,6 +52,26 @@ RESTORE_TARGETS=()
 
 mkdir -p "$LOG_DIR"
 
+require_executable() {
+  local label="$1"
+  local command_path="$2"
+
+  if ! command -v "$command_path" >/dev/null 2>&1; then
+    echo "ERROR: missing required executable ${label}: ${command_path}" >&2
+    exit 1
+  fi
+}
+
+require_file_executable() {
+  local label="$1"
+  local file_path="$2"
+
+  if [[ ! -x "$file_path" ]]; then
+    log "ERROR: missing or non-executable ${label}: ${file_path}"
+    exit 1
+  fi
+}
+
 log() {
   local message="$*"
   printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$message" | tee -a "$LOG_FILE"
@@ -189,11 +209,17 @@ verify_recovered_sessions() {
 recover_all() {
   local session
 
+  require_executable "tmux" "$TMUX_BIN"
+  require_executable "jq" "$JQ_BIN"
+
   for session in "$@"; do
     recover_session "$session"
   done
 
   if [[ "${#RESTORE_TARGETS[@]}" -gt 0 ]]; then
+    if [[ "$MODE" != "dry-run" ]]; then
+      require_file_executable "agent restore hook" "$RESTORE_AGENTS"
+    fi
     log "running agent restore hook targets=${RESTORE_TARGETS[*]}"
     run "$RESTORE_AGENTS" "${RESTORE_TARGETS[@]}"
   else
@@ -201,6 +227,9 @@ recover_all() {
   fi
 
   if [[ "$OPEN_ITERM" == "true" ]]; then
+    if [[ "$MODE" != "dry-run" ]]; then
+      require_file_executable "iTerm open script" "$OPEN_ITERM_SCRIPT"
+    fi
     if [[ "$#" -eq 1 ]]; then
       run "$OPEN_ITERM_SCRIPT" --apply "$1"
     else

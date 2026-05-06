@@ -51,6 +51,26 @@ log() {
   printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" | tee -a "$LOG_FILE"
 }
 
+require_executable() {
+  local label="$1"
+  local command_path="$2"
+
+  if ! command -v "$command_path" >/dev/null 2>&1; then
+    log "ERROR: missing required executable ${label}: ${command_path}"
+    exit 1
+  fi
+}
+
+require_file_executable() {
+  local label="$1"
+  local file_path="$2"
+
+  if [[ ! -x "$file_path" ]]; then
+    log "ERROR: missing or non-executable ${label}: ${file_path}"
+    exit 1
+  fi
+}
+
 run() {
   if [[ "$MODE" == "dry-run" ]]; then
     log "DRY-RUN: $*"
@@ -207,6 +227,10 @@ open_atomic_window() {
 
 main() {
   log "boot project windows start mode=$MODE"
+  require_executable "tmux" "$TMUX_BIN"
+  require_file_executable "agent restore hook" "$RESTORE_AGENTS"
+  require_file_executable "managed session recover script" "$RECOVER_MANAGED_SESSION"
+  require_file_executable "iTerm open script" "$OPEN_ITERM_SCRIPT"
   ensure_tmux_started
   if [[ "$MODE" != "dry-run" ]]; then
     recover_missing_atomic_sessions

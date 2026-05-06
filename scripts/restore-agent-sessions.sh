@@ -18,6 +18,16 @@ log() {
   printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*" >> "$LOG_FILE"
 }
 
+require_executable() {
+  local label="$1"
+  local command_path="$2"
+
+  if ! command -v "$command_path" >/dev/null 2>&1; then
+    log "ERROR: missing required executable ${label}: ${command_path}"
+    exit 1
+  fi
+}
+
 is_shell_command() {
   case "$1" in
     bash|dash|fish|sh|zsh)
@@ -105,6 +115,9 @@ main() {
     log "skip missing-registry path=${REGISTRY_FILE}"
     return 0
   fi
+
+  require_executable "tmux" "$TMUX_BIN"
+  require_executable "jq" "$JQ_BIN"
 
   "$JQ_BIN" -r '
     .sessions[]
