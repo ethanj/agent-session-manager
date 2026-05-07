@@ -11,7 +11,7 @@ scripts=(
   "$ROOT_DIR/scripts/recover-managed-session.sh"
   "$ROOT_DIR/scripts/restore-agent-sessions.sh"
   "$ROOT_DIR/scripts/open-iterm-sessions.sh"
-  "$ROOT_DIR/examples/atomic/boot-tmux-project-windows.sh"
+  "$ROOT_DIR/examples/sample-workstation/boot-tmux-project-windows.sh"
 )
 
 say "bash syntax"

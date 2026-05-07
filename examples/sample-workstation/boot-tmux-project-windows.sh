@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # boot-tmux-project-windows.sh
 #
-# AtomicMemory-style boot example. Starts tmux if needed, recovers missing
-# project sessions from the registry, restores known agents, and opens iTerm.
+# Sample multi-session workstation boot. Starts tmux if needed, recovers missing
+# registry-backed sessions, restores agents, and opens iTerm. Customize session
+# lists and registry entries for your environment.
 set -euo pipefail
 
 MODE="apply"
@@ -21,28 +22,29 @@ LOG_FILE="${LOG_FILE:-$LOG_DIR/project-window-boot.log}"
 BOOTSTRAP_SESSION="${BOOTSTRAP_SESSION:-0}"
 WAIT_SECONDS="${WAIT_SECONDS:-90}"
 
-ATOMIC_TABS=(
-  atomic-claude1
-  atomic-claude2
-  atomic-claude3
-  atomic-claude4
-  atomic-codex1
-  atomic-codex2
-  atomic-codex3
-  atomic-term1
-  atomic-term2
+# Example session names — must match entries in ~/.tmux-manager/registry.json
+DEMO_TABS=(
+  demo-claude1
+  demo-claude2
+  demo-claude3
+  demo-claude4
+  demo-codex1
+  demo-codex2
+  demo-codex3
+  demo-term1
+  demo-term2
 )
 
 CLAUDE_SESSIONS=(
-  atomic-claude1
-  atomic-claude2
-  atomic-claude3
-  atomic-claude4
+  demo-claude1
+  demo-claude2
+  demo-claude3
+  demo-claude4
 )
 
 CODEX_SESSIONS=(
-  atomic-codex1
-  atomic-codex2
+  demo-codex1
+  demo-codex2
 )
 
 mkdir -p "$LOG_DIR"
@@ -116,7 +118,7 @@ missing_sessions() {
   local missing=()
   local session
 
-  for session in "${ATOMIC_TABS[@]}"; do
+  for session in "${DEMO_TABS[@]}"; do
     if ! session_exists "$session"; then
       missing+=("$session")
     fi
@@ -125,36 +127,36 @@ missing_sessions() {
   printf '%s\n' "${missing[@]}"
 }
 
-wait_for_atomic_sessions() {
+wait_for_registry_sessions() {
   local deadline=$((SECONDS + WAIT_SECONDS))
   local missing
 
   while (( SECONDS < deadline )); do
     missing="$(missing_sessions)"
     if [[ -z "$missing" ]]; then
-      log "all Atomic tmux sessions exist"
+      log "all configured tmux sessions exist"
       return
     fi
     sleep 1
   done
 
-  log "ERROR: timed out waiting for Atomic sessions: $(missing_sessions | xargs)"
+  log "ERROR: timed out waiting for sessions: $(missing_sessions | xargs)"
   exit 1
 }
 
-recover_missing_atomic_sessions() {
+recover_missing_sessions() {
   local missing
   local session
 
   missing="$(missing_sessions)"
   if [[ -z "$missing" ]]; then
-    log "all Atomic tmux sessions exist"
+    log "all configured tmux sessions exist"
     return
   fi
 
   while IFS= read -r session; do
     [[ -z "$session" ]] && continue
-    log "recovering missing Atomic session: $session"
+    log "recovering missing session: $session"
     run "$RECOVER_MANAGED_SESSION" "$session"
   done <<< "$missing"
 }
@@ -169,10 +171,10 @@ agent_is_ready() {
   fi
 
   case "$session" in
-    atomic-claude*)
+    demo-claude*)
       [[ "$command" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
       ;;
-    atomic-codex*)
+    demo-codex*)
       [[ "$command" == codex* ]]
       ;;
     *)
@@ -201,28 +203,28 @@ wait_for_known_agents() {
       return
     fi
     if all_known_agents_ready; then
-      log "known Atomic agents are running from registry resume IDs"
+      log "known agents are running from registry resume IDs"
       return
     fi
     sleep 2
   done
 
-  log "ERROR: timed out waiting for known Atomic agents to run"
+  log "ERROR: timed out waiting for known agents to run"
   exit 1
 }
 
-atomic_clients_attached() {
-  "$TMUX_BIN" list-clients -F '#{session_name}' 2>/dev/null | grep -Eq '^atomic-'
+demo_clients_attached() {
+  "$TMUX_BIN" list-clients -F '#{session_name}' 2>/dev/null | grep -Eq '^demo-'
 }
 
-open_atomic_window() {
-  if [[ "$MODE" != "dry-run" ]] && atomic_clients_attached; then
-    log "Atomic tmux clients already attached; skipping duplicate iTerm window"
+open_iterm_workstation_window() {
+  if [[ "$MODE" != "dry-run" ]] && demo_clients_attached; then
+    log "tmux clients already attached for demo sessions; skipping duplicate iTerm window"
     return
   fi
 
-  log "opening Atomic iTerm project window"
-  run "$OPEN_ITERM_SCRIPT" --apply --tabs "${ATOMIC_TABS[@]}"
+  log "opening iTerm window with workstation tabs"
+  run "$OPEN_ITERM_SCRIPT" --apply --tabs "${DEMO_TABS[@]}"
 }
 
 main() {
@@ -233,13 +235,13 @@ main() {
   require_file_executable "iTerm open script" "$OPEN_ITERM_SCRIPT"
   ensure_tmux_started
   if [[ "$MODE" != "dry-run" ]]; then
-    recover_missing_atomic_sessions
-    wait_for_atomic_sessions
+    recover_missing_sessions
+    wait_for_registry_sessions
   else
-    log "DRY-RUN: would recover and wait for Atomic sessions: ${ATOMIC_TABS[*]}"
+    log "DRY-RUN: would recover and wait for sessions: ${DEMO_TABS[*]}"
   fi
   wait_for_known_agents
-  open_atomic_window
+  open_iterm_workstation_window
   log "boot project windows complete"
 }
 

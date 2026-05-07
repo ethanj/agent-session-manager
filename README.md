@@ -10,47 +10,51 @@ The manager treats `~/.tmux-manager/registry.json` as the only source of truth f
 - startup command
 - resume token
 
-It does not discover, infer, or search for resume tokens. Real local registry files should stay outside this repo.
+It does not discover, infer, or search for resume tokens. Keep real registry files and tokens out of version control.
 
 ## Install
 
-Keep this repo as the editable source, then symlink the scripts used by local launch/boot hooks:
+Clone or unpack this repository, then symlink the scripts used by your local launch or boot hooks (adjust paths to match your machine):
 
 ```bash
-ln -sf /Users/ethan/projects/supernet/agent-session-manager/scripts/recover-managed-session.sh ~/.tmux/recover-managed-session.sh
-ln -sf /Users/ethan/projects/supernet/agent-session-manager/scripts/restore-agent-sessions.sh ~/.tmux/restore-agent-sessions.sh
-ln -sf /Users/ethan/projects/supernet/agent-session-manager/scripts/open-iterm-sessions.sh ~/.claws/shared/open-atomic-iterm.sh
+REPO_ROOT="/path/to/agent-session-manager"
+
+ln -sf "$REPO_ROOT/scripts/recover-managed-session.sh" ~/.tmux/recover-managed-session.sh
+ln -sf "$REPO_ROOT/scripts/restore-agent-sessions.sh" ~/.tmux/restore-agent-sessions.sh
+ln -sf "$REPO_ROOT/scripts/open-iterm-sessions.sh" ~/.tmux/open-iterm-sessions.sh
 ```
 
 The generic scripts require `bash`, `tmux`, and `jq`. Opening iTerm tabs additionally requires macOS `osascript` and iTerm.
+
+`recover-managed-session.sh` defaults `OPEN_ITERM_SCRIPT` to `~/.tmux/open-iterm-sessions.sh`, which matches the symlink above. Override `OPEN_ITERM_SCRIPT` if you store the opener elsewhere.
 
 ## Recovery Contract
 
 Recover one managed session:
 
 ```bash
-scripts/recover-managed-session.sh atomic-codex2
+scripts/recover-managed-session.sh demo-codex1
 ```
 
 Recover and attach in iTerm:
 
 ```bash
-scripts/recover-managed-session.sh --open-iterm atomic-codex2
+scripts/recover-managed-session.sh --open-iterm demo-codex1
 ```
 
 Dry run:
 
 ```bash
-scripts/recover-managed-session.sh --dry-run atomic-codex2
+scripts/recover-managed-session.sh --dry-run demo-codex1
 ```
 
 The command is re-entrant. If the tmux session exists and pane `0.0` is already running a non-shell agent command, it does not call the restore hook. It only verifies:
 
 ```text
-exists session=atomic-codex2
-healthy session=atomic-codex2 command=codex-aarch64-a
+exists session=demo-codex1
+healthy session=demo-codex1 command=codex
 restore hook skipped; sessions already healthy
-verified session=atomic-codex2 pane=codex-aarch64-a /path/to/workspace
+verified session=demo-codex1 pane=codex /path/to/workspace
 ```
 
 If a managed session is missing, recovery reads the registry entry, resolves its cwd in deterministic order, creates the tmux session, restores only that target when needed, and verifies the final pane state.
@@ -60,7 +64,7 @@ If a managed session is missing, recovery reads the registry entry, resolves its
 - `scripts/recover-managed-session.sh` recreates missing managed tmux sessions, restores only sessions that need agent resume, and verifies final pane state.
 - `scripts/restore-agent-sessions.sh` starts registry-declared agent resume commands only when pane `0.0` is still a shell.
 - `scripts/open-iterm-sessions.sh` opens existing tmux sessions in iTerm control mode.
-- `examples/atomic/boot-tmux-project-windows.sh` is the current AtomicMemory-style boot orchestration example.
+- `examples/sample-workstation/boot-tmux-project-windows.sh` is an optional orchestration example that wires the above together for a multi-session layout.
 
 The scripts are configurable through environment variables:
 
@@ -86,3 +90,7 @@ Run deterministic checks before committing:
 ```bash
 make test
 ```
+
+## License
+
+MIT — see `LICENSE`.

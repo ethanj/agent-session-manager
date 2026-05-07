@@ -12,7 +12,7 @@ if [[ "${1:-}" == "--apply" ]]; then
   shift
 fi
 
-DEFAULT_SESSION="${DEFAULT_SESSION:-atomic-term1}"
+DEFAULT_SESSION="${DEFAULT_SESSION:-demo-term1}"
 TMUX_BIN="${TMUX_BIN:-$(command -v tmux || printf /opt/homebrew/bin/tmux)}"
 TABBED_MODE=false
 
