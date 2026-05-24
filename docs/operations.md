@@ -2,6 +2,18 @@
 
 Use these scripts for deterministic recovery of managed tmux agent sessions. The intended operator loop is inspect, dry-run, apply, then verify.
 
+## Recover All Managed Sessions
+
+```bash
+scripts/boot-managed-sessions.sh --dry-run
+scripts/boot-managed-sessions.sh
+scripts/boot-managed-sessions.sh --open-iterm
+```
+
+This is the reboot-oriented entrypoint. It reads every `managed: true` session from `~/.tmux-manager/registry.json`, runs a dry-run preflight for the full registry set, starts a bootstrap tmux server if needed, calls `recover-managed-session.sh`, and lets the recover script invoke agent resume only where needed. If the preflight reports any registry issue, apply mode stops before creating sessions.
+
+Agent sessions must declare both `agentThreadName` and `resumeToken`. `agentThreadName` is the human label; `resumeToken` is the durable CLI resume identifier. Dry-run fails if `resumeToken` is missing or is just the session/thread name, because that can resume an older or unrelated agent thread.
+
 ## Recover One Session
 
 ```bash
@@ -53,7 +65,8 @@ With no session arguments, the restore script scans all managed registry session
 - Missing managed registry entry: recovery fails for that session.
 - Unsafe session name: recovery fails before invoking tmux.
 - Missing cwd: recovery fails before creating a session.
-- Missing resume token: the agent pane is left as-is.
+- Missing `agentThreadName` or `resumeToken`: dry-run fails before recovery.
+- Ambiguous resume token equal to the session or thread name: dry-run fails before recovery.
 - Existing non-shell pane: restore is skipped because the agent is considered already running.
 - Existing shell pane with token: restore sends the resume command into pane `0.0`.
 - Missing iTerm dependency: iTerm attach fails before opening windows.
@@ -67,5 +80,6 @@ bash -n scripts/restore-agent-sessions.sh
 bash -n scripts/open-iterm-sessions.sh
 bash -n examples/sample-workstation/boot-tmux-project-windows.sh
 scripts/recover-managed-session.sh --dry-run demo-codex1
+scripts/boot-managed-sessions.sh --dry-run
 examples/sample-workstation/boot-tmux-project-windows.sh --dry-run
 ```
