@@ -7,10 +7,11 @@ The manager treats `~/.tmux-manager/registry.json` as the only source of truth f
 - managed tmux session names
 - project working directories
 - agent kind (`codex` or `claude-code`)
+- agent thread name for operator/audit matching
 - startup command
-- resume token
+- durable resume token
 
-It does not discover, infer, or search for resume tokens. Keep real registry files and tokens out of version control.
+It does not discover, infer, or search for resume tokens. `agentThreadName` is a label; `resumeToken` must be the durable CLI resume identifier. Keep real registry files and tokens out of version control.
 
 ## Install
 
@@ -22,6 +23,7 @@ REPO_ROOT="/path/to/agent-session-manager"
 ln -sf "$REPO_ROOT/scripts/recover-managed-session.sh" ~/.tmux/recover-managed-session.sh
 ln -sf "$REPO_ROOT/scripts/restore-agent-sessions.sh" ~/.tmux/restore-agent-sessions.sh
 ln -sf "$REPO_ROOT/scripts/open-iterm-sessions.sh" ~/.tmux/open-iterm-sessions.sh
+ln -sf "$REPO_ROOT/scripts/boot-managed-sessions.sh" ~/.tmux/boot-managed-sessions.sh
 ```
 
 The generic scripts require `bash`, `tmux`, and `jq`. Opening iTerm tabs additionally requires macOS `osascript` and iTerm.
@@ -42,11 +44,21 @@ Recover and attach in iTerm:
 scripts/recover-managed-session.sh --open-iterm demo-codex1
 ```
 
+Recover every managed registry session after a reboot:
+
+```bash
+scripts/boot-managed-sessions.sh
+scripts/boot-managed-sessions.sh --open-iterm
+```
+
 Dry run:
 
 ```bash
 scripts/recover-managed-session.sh --dry-run demo-codex1
+scripts/boot-managed-sessions.sh --dry-run
 ```
+
+Dry-run validates agent registry entries. Apply-mode recovery runs the dry-run preflight first and stops before creating sessions if an agent is missing `agentThreadName`, missing `resumeToken`, or uses a session/thread name as the resume token.
 
 The command is re-entrant. If the tmux session exists and pane `0.0` is already running a non-shell agent command, it does not call the restore hook. It only verifies:
 
@@ -61,6 +73,7 @@ If a managed session is missing, recovery reads the registry entry, resolves its
 
 ## Scripts
 
+- `scripts/boot-managed-sessions.sh` enumerates every `managed: true` registry session, starts tmux if needed, and delegates recovery for the full set.
 - `scripts/recover-managed-session.sh` recreates missing managed tmux sessions, restores only sessions that need agent resume, and verifies final pane state.
 - `scripts/restore-agent-sessions.sh` starts registry-declared agent resume commands only when pane `0.0` is still a shell.
 - `scripts/open-iterm-sessions.sh` opens existing tmux sessions in iTerm control mode.
@@ -76,6 +89,7 @@ The scripts are configurable through environment variables:
 - `OSASCRIPT_BIN`
 - `LOG_DIR`
 - `LOG_FILE`
+- `BOOTSTRAP_SESSION`
 
 ## Registry Shape
 

@@ -11,6 +11,7 @@ REGISTRY_FILE="${REGISTRY_FILE:-$HOME/.tmux-manager/registry.json}"
 LOG_DIR="${LOG_DIR:-$HOME/.tmux/restore-logs}"
 LOG_FILE="${LOG_FILE:-$LOG_DIR/agent-restore.log}"
 TARGET_SESSIONS=("$@")
+REGISTRY_DELIMITER=$'\037'
 
 mkdir -p "$LOG_DIR"
 
@@ -62,12 +63,23 @@ restore_agent_session() {
   local agent_kind="$2"
   local start_command="$3"
   local resume_token="$4"
+  local agent_thread_name="$5"
   local target="${session_name}:0.0"
   local resume_command current_command
 
+  if [[ -z "$agent_thread_name" ]]; then
+    log "ERROR missing-agent-thread-name session=${session_name}"
+    return 1
+  fi
+
   if [[ -z "$resume_token" ]]; then
-    log "skip missing-resume-token session=${session_name}"
-    return 0
+    log "ERROR missing-resume-token session=${session_name}"
+    return 1
+  fi
+
+  if [[ "$resume_token" == "$session_name" || "$resume_token" == "$agent_thread_name" ]]; then
+    log "ERROR ambiguous-resume-token session=${session_name}"
+    return 1
   fi
 
   resume_command="$(build_resume_command "$agent_kind" "$start_command" "$resume_token")"
@@ -90,7 +102,7 @@ restore_agent_session() {
 
   "$TMUX_BIN" send-keys -t "$target" -l -- "$resume_command"
   "$TMUX_BIN" send-keys -t "$target" Enter
-  log "started session=${session_name} command=${resume_command}"
+  log "started session=${session_name} agentKind=${agent_kind} startCommand=${start_command}"
 }
 
 should_restore_session() {
@@ -124,13 +136,13 @@ main() {
     | select(.managed == true)
     | select(.agentKind == "claude-code" or .agentKind == "codex")
     | select((.startCommand // "") != "")
-    | [.sessionName, .agentKind, .startCommand, (.resumeToken // "")]
-    | @tsv
+    | [.sessionName, .agentKind, .startCommand, (.resumeToken // ""), (.agentThreadName // "")]
+    | join("\u001f")
   ' "$REGISTRY_FILE" |
-    while IFS=$'\t' read -r session_name agent_kind start_command resume_token; do
+    while IFS="$REGISTRY_DELIMITER" read -r session_name agent_kind start_command resume_token agent_thread_name; do
       [[ -z "$session_name" || -z "$start_command" ]] && continue
       should_restore_session "$session_name" || continue
-      restore_agent_session "$session_name" "$agent_kind" "$start_command" "$resume_token"
+      restore_agent_session "$session_name" "$agent_kind" "$start_command" "$resume_token" "$agent_thread_name"
     done
 }
 

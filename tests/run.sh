@@ -8,6 +8,7 @@ say() {
 }
 
 scripts=(
+  "$ROOT_DIR/scripts/boot-managed-sessions.sh"
   "$ROOT_DIR/scripts/recover-managed-session.sh"
   "$ROOT_DIR/scripts/restore-agent-sessions.sh"
   "$ROOT_DIR/scripts/open-iterm-sessions.sh"
@@ -53,11 +54,34 @@ registry_file="$tmp_dir/registry.json"
   printf '    "projectId": "project",\n'
   printf '    "managed": true,\n'
   printf '    "agentKind": "codex",\n'
+  printf '    "agentThreadName": "demo test codex",\n'
   printf '    "startCommand": "codex",\n'
   printf '    "resumeToken": "TEST_RESUME_TOKEN"\n'
+  printf '  }, {\n'
+  printf '    "sessionName": "test-term",\n'
+  printf '    "projectId": "project",\n'
+  printf '    "managed": true\n'
   printf '  }]\n'
   printf '}\n'
 } > "$registry_file"
+
+boot_output="$(
+  REGISTRY_FILE="$registry_file" \
+    TMUX_BIN=/usr/bin/false \
+    LOG_DIR="$tmp_dir/logs" \
+    "$ROOT_DIR/scripts/boot-managed-sessions.sh" --dry-run
+)"
+
+case "$boot_output" in
+  *"boot managed sessions start mode=dry-run"*"starting tmux bootstrap session=0"*"recovering managed sessions: test-codex test-term"*"DRY-RUN:"*"boot managed sessions complete count=2"*)
+    say "  ok boot dry-run"
+    ;;
+  *)
+    say "ERROR: unexpected boot dry-run output"
+    printf '%s\n' "$boot_output"
+    exit 1
+    ;;
+esac
 
 recover_output="$(
   REGISTRY_FILE="$registry_file" \
@@ -74,6 +98,32 @@ case "$recover_output" in
   *)
     say "ERROR: unexpected recover dry-run output"
     printf '%s\n' "$recover_output"
+    exit 1
+    ;;
+esac
+
+bad_registry_file="$tmp_dir/bad-registry.json"
+jq '.sessions[0].resumeToken = "test-codex" | .sessions[0].agentThreadName = "test-codex"' \
+  "$registry_file" > "$bad_registry_file"
+
+if bad_output="$(
+  REGISTRY_FILE="$bad_registry_file" \
+    TMUX_BIN=/usr/bin/false \
+    LOG_DIR="$tmp_dir/logs" \
+    "$ROOT_DIR/scripts/recover-managed-session.sh" --dry-run test-codex
+)"; then
+  say "ERROR: bad recover dry-run unexpectedly passed"
+  printf '%s\n' "$bad_output"
+  exit 1
+fi
+
+case "$bad_output" in
+  *"resumeToken must be durable id"*"dry-run validation failed"*)
+    say "  ok recover dry-run rejects ambiguous resume token"
+    ;;
+  *)
+    say "ERROR: unexpected bad recover dry-run output"
+    printf '%s\n' "$bad_output"
     exit 1
     ;;
 esac

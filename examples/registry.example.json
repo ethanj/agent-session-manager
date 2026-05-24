@@ -26,6 +26,7 @@
       "agentKind": "codex",
       "role": "agent worker",
       "managed": true,
+      "agentThreadName": "demo-codex1",
       "startCommand": "codex --dangerously-bypass-approvals-and-sandbox",
       "resumeToken": "REPLACE_WITH_CODEX_RESUME_ID"
     },

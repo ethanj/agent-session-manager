@@ -49,6 +49,8 @@ OPEN_ITERM_SCRIPT="${OPEN_ITERM_SCRIPT:-$HOME/.tmux/open-iterm-sessions.sh}"
 LOG_DIR="${LOG_DIR:-$HOME/.tmux/restore-logs}"
 LOG_FILE="${LOG_FILE:-$LOG_DIR/managed-session-recover.log}"
 RESTORE_TARGETS=()
+VALIDATION_ERRORS=0
+REGISTRY_DELIMITER=$'\037'
 
 mkdir -p "$LOG_DIR"
 
@@ -121,15 +123,85 @@ registry_row() {
         $cwd,
         ($session.agentKind // ""),
         ($session.resumeToken // ""),
-        ($session.startCommand // "")
+        ($session.startCommand // ""),
+        ($session.agentThreadName // "")
       ]
-    | @tsv
+    | join("\u001f")
   ' "$REGISTRY_FILE"
+}
+
+validation_error() {
+  log "ERROR: $*"
+  VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+}
+
+validate_session() {
+  local requested_name="$1"
+  local row session_name cwd agent_kind resume_token start_command agent_thread_name
+
+  if ! row="$(registry_row "$requested_name")"; then
+    validation_error "no managed registry entry for session=${requested_name}"
+    return 0
+  fi
+
+  IFS="$REGISTRY_DELIMITER" read -r session_name cwd agent_kind resume_token start_command agent_thread_name <<< "$row"
+
+  if [[ ! "$session_name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    validation_error "unsafe session name from registry: $session_name"
+  fi
+
+  if [[ ! -d "$cwd" ]]; then
+    validation_error "registry cwd does not exist for session=${session_name}: $cwd"
+  fi
+
+  if [[ -n "$agent_kind" ]]; then
+    case "$agent_kind" in
+      codex|claude-code)
+        ;;
+      *)
+        validation_error "unsupported agentKind for session=${session_name}: $agent_kind"
+        ;;
+    esac
+
+    if [[ -z "$start_command" ]]; then
+      validation_error "agent session=${session_name} missing startCommand"
+    fi
+
+    if [[ -z "$agent_thread_name" ]]; then
+      validation_error "agent session=${session_name} missing agentThreadName"
+    fi
+
+    if [[ -z "$resume_token" ]]; then
+      validation_error "agent session=${session_name} missing resumeToken"
+    elif [[ "$resume_token" == "$session_name" || "$resume_token" == "$agent_thread_name" ]]; then
+      validation_error "agent session=${session_name} resumeToken must be durable id, not session/thread name"
+    fi
+  fi
+}
+
+validate_requested_sessions() {
+  local session
+
+  if [[ ! -f "$REGISTRY_FILE" ]]; then
+    log "ERROR: missing registry file: $REGISTRY_FILE"
+    exit 1
+  fi
+
+  for session in "$@"; do
+    validate_session "$session"
+  done
+
+  if [[ "$VALIDATION_ERRORS" -gt 0 ]]; then
+    log "dry-run validation failed errors=${VALIDATION_ERRORS}"
+    exit 1
+  fi
+
+  log "dry-run validation passed sessions=$*"
 }
 
 recover_session() {
   local requested_name="$1"
-  local row session_name cwd agent_kind resume_token start_command
+  local row session_name cwd agent_kind resume_token start_command agent_thread_name
   local current_command session_was_created
 
   if [[ ! -f "$REGISTRY_FILE" ]]; then
@@ -142,7 +214,7 @@ recover_session() {
     exit 1
   fi
 
-  IFS=$'\t' read -r session_name cwd agent_kind resume_token start_command <<< "$row"
+  IFS="$REGISTRY_DELIMITER" read -r session_name cwd agent_kind resume_token start_command agent_thread_name <<< "$row"
 
   if [[ ! "$session_name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     log "ERROR: unsafe session name from registry: $session_name"
@@ -211,6 +283,13 @@ recover_all() {
 
   require_executable "tmux" "$TMUX_BIN"
   require_executable "jq" "$JQ_BIN"
+  validate_requested_sessions "$@"
+
+  if [[ "$MODE" != "dry-run" && "${ASM_SKIP_PREFLIGHT:-0}" != "1" ]]; then
+    log "preflight dry-run for sessions=$*"
+    ASM_SKIP_PREFLIGHT=1 "$0" --dry-run "$@"
+    log "preflight dry-run passed"
+  fi
 
   for session in "$@"; do
     recover_session "$session"
