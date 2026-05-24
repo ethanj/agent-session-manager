@@ -27,6 +27,8 @@ ln -sf "$REPO_ROOT/scripts/recover-managed-session.sh" ~/.tmux/recover-managed-s
 ln -sf "$REPO_ROOT/scripts/restore-agent-sessions.sh" ~/.tmux/restore-agent-sessions.sh
 ln -sf "$REPO_ROOT/scripts/open-iterm-sessions.sh" ~/.tmux/open-iterm-sessions.sh
 ln -sf "$REPO_ROOT/scripts/boot-managed-sessions.sh" ~/.tmux/boot-managed-sessions.sh
+ln -sf "$REPO_ROOT/scripts/run-continuum-save.sh" ~/.tmux/run-continuum-save.sh
+ln -sf "$REPO_ROOT/scripts/mark-restore-complete.sh" ~/.tmux/mark-restore-complete.sh
 ```
 
 The generic scripts require `bash`, `tmux`, and `jq`. Opening iTerm tabs additionally requires macOS `osascript` and iTerm.
@@ -46,6 +48,11 @@ sessions, sending resume commands, or opening iTerm tabs. If any managed agent
 session is missing `agentThreadName`, missing `resumeToken`, or uses a
 session/thread name as the resume token, recovery exits non-zero and does not
 continue.
+
+Timer-driven autosaves are also gated. `run-continuum-save.sh` only writes a
+snapshot after the current tmux server PID has been marked restore-complete by
+`mark-restore-complete.sh`. A newly-started tmux server therefore cannot
+overwrite the pre-reboot snapshot while restore is still pending.
 
 This matters because tmux session names and human thread names are not durable
 agent conversation IDs. Using names as resume values can resume stale or
@@ -79,6 +86,14 @@ scripts/recover-managed-session.sh --dry-run demo-codex1
 scripts/boot-managed-sessions.sh --dry-run
 ```
 
+List and preview available tmux-resurrect snapshots:
+
+```bash
+scripts/tmux-snapshot-selector.sh --list
+scripts/tmux-snapshot-selector.sh --preview last-known-good
+scripts/tmux-snapshot-selector.sh --select 2
+```
+
 The command is re-entrant. If the tmux session exists and pane `0.0` is already running a non-shell agent command, it does not call the restore hook. It only verifies:
 
 ```text
@@ -95,6 +110,9 @@ If a managed session is missing, recovery reads the registry entry, resolves its
 - `scripts/boot-managed-sessions.sh` enumerates every `managed: true` registry session, starts tmux if needed, and delegates recovery for the full set.
 - `scripts/recover-managed-session.sh` recreates missing managed tmux sessions, restores only sessions that need agent resume, and verifies final pane state.
 - `scripts/restore-agent-sessions.sh` starts registry-declared agent resume commands only when pane `0.0` is still a shell, and refuses unsafe missing or name-based resume IDs.
+- `scripts/run-continuum-save.sh` is the launchd/timer-safe save wrapper; it skips autosave until the current tmux server is marked restored and then advances both `last` and `last-known-good`.
+- `scripts/mark-restore-complete.sh` marks the current tmux server PID as safe for timer-driven saves after restore completes.
+- `scripts/tmux-snapshot-selector.sh` lists, previews, and selects tmux-resurrect snapshots without printing full pane command lines.
 - `scripts/open-iterm-sessions.sh` opens existing tmux sessions in iTerm control mode.
 - `examples/sample-workstation/boot-tmux-project-windows.sh` is an optional orchestration example that wires the above together for a multi-session layout.
 
@@ -109,10 +127,17 @@ The scripts are configurable through environment variables:
 - `LOG_DIR`
 - `LOG_FILE`
 - `BOOTSTRAP_SESSION`
+- `RESURRECT_DIR`
+- `RESTORE_GUARD_DIR`
 
 ## Registry Shape
 
 See `examples/registry.example.json` and `docs/registry.md`. Do not commit real resume tokens.
+
+Snapshots and the registry are complementary. Tmux-resurrect snapshots restore
+the point-in-time tmux topology; `registry.json` controls which sessions are
+managed and which durable agent resume IDs may be used after that topology is
+back. See `docs/registry.md` for the detailed relationship and conflict rules.
 
 ## Operations
 

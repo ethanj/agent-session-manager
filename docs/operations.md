@@ -24,6 +24,59 @@ dry-run validation failed errors=2
 
 Fix the registry before rerunning apply mode. Do not temporarily replace a missing durable ID with the tmux session name; that hides the error and can resume the wrong thread.
 
+## Autosave Guard
+
+Timer-driven autosave must not run ahead of restore. Otherwise a newly-created
+bootstrap tmux server can produce a misleading snapshot before the pre-reboot
+state has been restored.
+
+Use `scripts/run-continuum-save.sh` as the launchd/timer entrypoint. It checks
+the current tmux server PID and exits without saving unless that exact PID has
+been marked restore-complete:
+
+```bash
+scripts/mark-restore-complete.sh
+scripts/run-continuum-save.sh
+```
+
+A restore/login boot flow should:
+
+1. choose the restore source from `last-known-good` first, then `last`
+2. restore tmux-resurrect from that pinned source
+3. run registry recovery
+4. open any iTerm client windows
+5. run `mark-restore-complete.sh`
+6. allow the next `run-continuum-save.sh` invocation to save the now-restored state
+
+After a valid save, `run-continuum-save.sh` updates `last-known-good` to the
+same snapshot as `last`. Pre-restore autosave attempts do not update either
+pointer.
+
+## Snapshot Browser
+
+Use `tmux-snapshot-selector.sh` to inspect previous tmux-resurrect snapshots
+before choosing a restore source:
+
+```bash
+scripts/tmux-snapshot-selector.sh --list
+scripts/tmux-snapshot-selector.sh --preview last-known-good
+scripts/tmux-snapshot-selector.sh --preview 3
+scripts/tmux-snapshot-selector.sh --select 3
+```
+
+Selectors can be:
+
+- `last`
+- `last-known-good` or `lkg`
+- a 1-based index from `--list`
+- a snapshot basename such as `tmux_resurrect_20260524T010203.txt`
+- an absolute snapshot path
+
+Preview output includes validity, pane/window/state counts, unique session
+count, and one line per tmux session with cwd and agent-like command
+classification. It deliberately does not print full pane command lines because
+those can contain resume tokens or private arguments.
+
 ## Recover One Session
 
 ```bash
@@ -83,6 +136,7 @@ This hook is intentionally strict. It exits non-zero when a targeted agent is mi
 - Existing non-shell pane: restore is skipped because the agent is considered already running.
 - Existing shell pane with token: restore sends the resume command into pane `0.0`.
 - Missing iTerm dependency: iTerm attach fails before opening windows.
+- Autosave before restore-complete: save wrapper exits zero and logs `skip restore-not-complete`.
 
 ## Updating Resume IDs
 
@@ -94,9 +148,12 @@ When a user renames a tmux session or agent thread, update `agentThreadName` as 
 make test
 bash -n scripts/recover-managed-session.sh
 bash -n scripts/restore-agent-sessions.sh
+bash -n scripts/run-continuum-save.sh
+bash -n scripts/tmux-snapshot-selector.sh
 bash -n scripts/open-iterm-sessions.sh
 bash -n examples/sample-workstation/boot-tmux-project-windows.sh
 scripts/recover-managed-session.sh --dry-run demo-codex1
 scripts/boot-managed-sessions.sh --dry-run
+scripts/tmux-snapshot-selector.sh --list
 examples/sample-workstation/boot-tmux-project-windows.sh --dry-run
 ```

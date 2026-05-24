@@ -68,3 +68,26 @@ Dry-runs validate these invariants and exit non-zero on ambiguity. Apply-mode re
 ## Reboot Coverage
 
 For full reboot recovery, call `scripts/boot-managed-sessions.sh`. It enumerates all `managed: true` sessions in this registry and passes those names to `recover-managed-session.sh`. Fixed project-specific boot scripts are examples only; they restore only the sessions listed inside those scripts.
+
+## Snapshot Safety
+
+The restore snapshot and the registry serve different roles. Tmux-resurrect
+snapshots recreate tmux topology; this registry decides which restored shell
+panes may receive agent resume commands.
+
+In practice:
+
+- Snapshot answers: "What tmux sessions/windows/panes existed at this point in time?"
+- Registry answers: "Which sessions are managed, where should missing ones start, and which exact agent resume IDs are safe?"
+- Restore order is snapshot first, registry second. Restore the tmux topology, then use the registry to validate and resume only safe agent panes.
+- A session in the snapshot but not in the registry can still be recreated by tmux-resurrect, but it will not receive registry-driven agent resume.
+- A session in the registry but not in the snapshot can be recreated by `recover-managed-session.sh` if its cwd and agent metadata validate.
+- A restored pane that is already running a non-shell process is treated as healthy; the registry is not used to send a resume command into it.
+- A restored pane that is just a shell may receive a resume command only when the registry has a non-ambiguous durable `resumeToken`.
+
+At reboot/login time, choose the snapshot before creating or saving new tmux
+state. The autosave wrapper maintains a `last-known-good` symlink beside
+tmux-resurrect's `last` symlink and only advances it after the current tmux
+server has been marked restore-complete. Restore flows should prefer
+`last-known-good`, falling back to `last` only when no valid known-good snapshot
+exists.

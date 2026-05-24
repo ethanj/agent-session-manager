@@ -9,8 +9,11 @@ say() {
 
 scripts=(
   "$ROOT_DIR/scripts/boot-managed-sessions.sh"
+  "$ROOT_DIR/scripts/mark-restore-complete.sh"
   "$ROOT_DIR/scripts/recover-managed-session.sh"
   "$ROOT_DIR/scripts/restore-agent-sessions.sh"
+  "$ROOT_DIR/scripts/run-continuum-save.sh"
+  "$ROOT_DIR/scripts/tmux-snapshot-selector.sh"
   "$ROOT_DIR/scripts/open-iterm-sessions.sh"
   "$ROOT_DIR/examples/sample-workstation/boot-tmux-project-windows.sh"
 )
@@ -136,6 +139,52 @@ case "$open_output" in
   *)
     say "ERROR: unexpected open-iterm dry-run output"
     printf '%s\n' "$open_output"
+    exit 1
+    ;;
+esac
+
+resurrect_dir="$tmp_dir/resurrect"
+mkdir -p "$resurrect_dir"
+snapshot_file="$resurrect_dir/tmux_resurrect_20260524T010203.txt"
+{
+  printf 'pane\tdemo-codex1\t0\t1\t:*\t0\tMac.lan\t:%s\t1\tcodex-aarch64-a\t:codex --redacted\n' "$ROOT_DIR"
+  printf 'window\tdemo-codex1\t0\t:zsh\t1\t:*\tlayout\t:\n'
+  printf 'state\tdemo-codex1\tdemo-codex1\n'
+} > "$snapshot_file"
+ln -s "$(basename "$snapshot_file")" "$resurrect_dir/last"
+
+snapshot_list="$(RESURRECT_DIR="$resurrect_dir" "$ROOT_DIR/scripts/tmux-snapshot-selector.sh" --list)"
+case "$snapshot_list" in
+  *"validity"*"good"*"tmux_resurrect_20260524T010203.txt"*)
+    say "  ok snapshot list"
+    ;;
+  *)
+    say "ERROR: unexpected snapshot list output"
+    printf '%s\n' "$snapshot_list"
+    exit 1
+    ;;
+esac
+
+snapshot_preview="$(RESURRECT_DIR="$resurrect_dir" "$ROOT_DIR/scripts/tmux-snapshot-selector.sh" --preview 1)"
+case "$snapshot_preview" in
+  *"validity=good panes=1 windows=1 state=1 unique_sessions=1"*"demo-codex1"*"kind=codex"*)
+    say "  ok snapshot preview"
+    ;;
+  *)
+    say "ERROR: unexpected snapshot preview output"
+    printf '%s\n' "$snapshot_preview"
+    exit 1
+    ;;
+esac
+
+snapshot_select="$(RESURRECT_DIR="$resurrect_dir" "$ROOT_DIR/scripts/tmux-snapshot-selector.sh" --select 1 --yes)"
+case "$snapshot_select" in
+  *"selected snapshot=tmux_resurrect_20260524T010203.txt"*)
+    say "  ok snapshot select"
+    ;;
+  *)
+    say "ERROR: unexpected snapshot select output"
+    printf '%s\n' "$snapshot_select"
     exit 1
     ;;
 esac
