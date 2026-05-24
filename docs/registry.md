@@ -1,6 +1,6 @@
 # Registry Contract
 
-`~/.tmux-manager/registry.json` is the source of truth for managed tmux sessions. Scripts in this repo only act on data declared in that file.
+`~/.tmux-manager/registry.json` is the source of truth for managed tmux sessions. Scripts in this repo only act on data declared in that file. Agent labels and durable resume IDs are intentionally separate fields.
 
 ## Top-Level Collections
 
@@ -15,9 +15,9 @@
 - `projectId`: links the session to a project for cwd fallback.
 - `cwd`: optional session-specific working directory. This wins over all fallback roots.
 - `agentKind`: optional. Only `codex` and `claude-code` are restored as agent panes.
-- `agentThreadName`: required for agent sessions. Human-readable thread label used for audit and operator matching.
+- `agentThreadName`: required for agent sessions. Human-readable thread label used for audit and operator matching. This may match the tmux session name.
 - `startCommand`: command prefix used to build the resume command.
-- `resumeToken`: required for agent sessions. This must be the durable CLI resume identifier, not the tmux session name or human thread label.
+- `resumeToken`: required for agent sessions. This must be the durable CLI resume identifier, not the tmux session name or human thread label. Leave it empty when unknown so dry-run blocks recovery.
 
 ## cwd Resolution
 
@@ -45,7 +45,25 @@ Resume tokens are never discovered or guessed. The restore script only resumes r
 
 Do not commit real registry files or real resume tokens. Keep committed examples generic.
 
-Dry-runs validate these invariants and exit non-zero on ambiguity. Apply-mode recovery runs the same dry-run preflight first and stops before creating tmux sessions if validation fails.
+Dry-runs validate these invariants and exit non-zero on ambiguity. Apply-mode recovery runs the same dry-run preflight first and stops before creating tmux sessions if validation fails. The direct `restore-agent-sessions.sh` hook enforces the same missing-token and name-based-token checks before sending any resume command.
+
+## Example Agent Session
+
+```json
+{
+  "sessionName": "demo-codex1",
+  "scope": "project",
+  "projectId": "demo-project",
+  "agentKind": "codex",
+  "role": "agent worker",
+  "managed": true,
+  "agentThreadName": "demo-codex1",
+  "startCommand": "codex --dangerously-bypass-approvals-and-sandbox",
+  "resumeToken": "REPLACE_WITH_DURABLE_CODEX_RESUME_ID"
+}
+```
+
+`agentThreadName` can be a convenient operator label. `resumeToken` must be whatever the agent CLI requires for exact resume. If those values are the same, recovery treats the entry as unsafe and fails dry-run.
 
 ## Reboot Coverage
 
